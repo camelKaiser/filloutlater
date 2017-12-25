@@ -9,7 +9,7 @@ from keras.optimizers import RMSprop
 import numpy as np
 import os
 
-population_size = 50    
+population_size = 150
 fitness = [] 
 current_models = []
 generation = 1
@@ -35,14 +35,21 @@ def init_models():      #initialize initial poppulation
         
         
         current_models.append(model)
-        fitness.append([0,0,0]) #Win, Loss, Draw
-
     print ("Successfully Initialized Models!")
 
+def resetFit():
+    global fitness
+    fitness = []
+    for i in range(population_size):
+        fitness.append([0,0,0])
+    
 def load_models(gen):       #loads up saved models
+    
+    print ("Loading saved models from generation " + str(gen) + "...")
     #TODO add custom model locations
     for i in range(population_size):
         current_models[i].load_weights("Model_Pool_Generation_" + str(gen) + "/model_new"+str(i)+".keras")
+    print ("Models Loaded!")
         
 def save_models():      #Saves each generation to it's own folder. If storage is an issue remove generation from the save path
     if not os.path.exists("Model_Pool_Generation_" + str(generation)):
@@ -52,7 +59,7 @@ def save_models():      #Saves each generation to it's own folder. If storage is
     print("Saved current pool!")
 
 def save_fitness():     #saves fitness values 
-    with open("Model_Pool_Generation_" + str(generation) + '/fitness.csv', 'w') as csvfile:
+    with open("Model_Pool_Generation_" + str(generation) + '/fitness' + str(generation) + '.csv', 'w', newline = '') as csvfile:
         writer = csv.writer(csvfile)
         for i in range(len(fitness)):
             writer.writerow([i, fitness[i][0], fitness[i][1], fitness[i][2]])
@@ -66,10 +73,9 @@ def normalizeFitness():         #modular function that can be tweaked as needed
         score += (ratio[0]/totalGames)*5+(ratio[1]/totalGames)
         totalFitness.append(score)
     #normalize the data to 0-1
-    minV = min(totalFitness)
-    maxV = max(totalFitness)
+    totalSum = sum(totalFitness)
     for i in range(population_size):
-        totalFitness[i] = (totalFitness[i] - minV)/(maxV - minV)
+        totalFitness[i] /= totalSum
     return totalFitness
 
 def mutate(weights): #randomly mutate a set of weights
@@ -99,24 +105,38 @@ def evolve():
     print("Beginning Evolution")
     newPopulation = []
     total_fitness = normalizeFitness()
+    
+    f = open("Model_Pool_Generation_" + str(generation) + '/children.csv', 'w', newline = '')
+    writer = csv.writer(f)
+    children = [0] * population_size
+    
+    
     for select in range(population_size):
         parent1 = random.uniform(0, 1)
         parent2 = random.uniform(0, 1)
         idx1 = -1
         idx2 = -1
         print(total_fitness)
+        probScore = 0
         for idxx in range(population_size):     #better models have > chance for kids
-            if total_fitness[idxx] >= parent1:
+            probScore += total_fitness[idxx]
+            if probScore >= parent1:
                 idx1 = idxx
                 break
+        probScore = 0
         for idxx in range(population_size):
-            if total_fitness[idxx] >= parent2:
+            probScore += total_fitness[idxx]
+            if probScore >= parent2:
                 idx2 = idxx
                 break
-        new_weights = matchmake(idx1, idx2)     #spawn and corrupt the child
+        children[idx1] += 1
+        children[idx2] += 1
+        new_weights = matchmake(idx1, idx2)     #spawn and mutate child
         new_weights = mutate(new_weights)
         newPopulation.append(new_weights)
-        
+    for i in range(population_size):
+        writer.writerow([total_fitness[i], children[i]])
+    f.close()
     #cull the old
     for i in range(population_size):
         current_models[i].set_weights(newPopulation[i])
@@ -124,9 +144,11 @@ def evolve():
     print("Evolution finished for gen " + str(generation))
     
 def trainGeneration():
+    resetFit()
+    print (fitness)
     print("Beginning Training for Generation " + str(generation))
     print (str(population_size) + " models")
-    
+    numgames = 0
     for player1 in range(population_size):          #Simulate a round robin where every possible model/color match occurs
         for player2 in range(population_size):
             if player1 == player2:
@@ -153,6 +175,7 @@ def trainGeneration():
                 #gam.write(str(game.board.fen()) + "\n")
             #gam.close()
             result = game.board.result() 
+            numgames += 1
             if result == '1-0':     #white (p2) won
                 fitness[player2][0] += 1
                 fitness[player1][1] += 1
@@ -167,7 +190,7 @@ def trainGeneration():
                 print ("Model " + str(player1) + " (black) just drew model " + str(player2) + " (white)")
     print ("Finished Generation " + str(generation))
     save_fitness()
-
+    print ("Games: " + str(numgames))
 init_models()
 save_models()
 while (generation > 0):
