@@ -9,7 +9,7 @@ from keras.optimizers import RMSprop
 import numpy as np
 import os
 
-population_size = 150
+population_size = 50
 fitness = [] 
 current_models = []
 generation = 1
@@ -30,7 +30,7 @@ def init_models():      #initialize initial poppulation
         model.add(Dense(units = 296))
         model.add(Activation('relu'))
         model.add(Dense(units = 1))
-        model.add(Activation('tanh'))
+        model.add(Activation('sigmoid'))
         model.compile(optimizer = rms, loss = 'mse')
         
         
@@ -157,20 +157,25 @@ def trainGeneration():
             
             game.reset()
             while(not game.board.is_game_over()):   #play the game
-                bestMove = (None, -2)
                 #Play the game
-                generator = game.board.legal_moves
+                generator = list(game.board.legal_moves)
+                probabilities = []
                 for move in generator:
                     game.push(move)         #evaluate the new position
                     features = np.asarray(game.getFeatures())
                     features = np.atleast_2d(features)
-                    score = players[int(game.turn())].predict(features, 1)
+                    score = (players[int(game.turn())].predict(features, 1))[0][0]
                     #intv.write(str(score)) 
-                    if score > bestMove[1]:
-                        bestMove = (move, score)    
+                    
+                    probabilities.append(score)     #add 1 to constrain hyperbolic tangent ouput to 0-2
+                    
                     game.pop()  
+                cumulative = sum(probabilities)
                 
-                game.push(bestMove[0])
+                for i in range(len(probabilities)):
+                    probabilities[i] /= cumulative
+              
+                game.push(np.random.choice(generator, p=probabilities))
                 #gam.write(str(bestMove[0]) + "\n")
                 #gam.write(str(game.board.fen()) + "\n")
             #gam.close()
